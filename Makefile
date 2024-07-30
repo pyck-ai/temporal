@@ -130,8 +130,9 @@ print-go-version:
 $(STAMPDIR):
 	@mkdir -p $(STAMPDIR)
 
-$(LOCALBIN):
-	@mkdir -p $(LOCALBIN)
+update-linters:
+	@printf $(COLOR) "Install/update linters..."
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
 
 # When updating the version, update the golangci-lint GHA workflow as well.
 .PHONY: golangci-lint
@@ -453,6 +454,17 @@ install-schema-postgresql12: temporal-sql-tool
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres12 --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres12 --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v12/visibility/versioned
 
+install-schema-cockroachdb: temporal-sql-tool
+	@printf $(COLOR) "Install CockroachDB schema..."
+	./temporal-sql-tool -u root --pw $(SQL_PASSWORD) -p 26257 --pl postgres12 --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u root --pw $(SQL_PASSWORD) -p 26257 --pl postgres12 --db $(TEMPORAL_DB) create
+	./temporal-sql-tool -u root --pw $(SQL_PASSWORD) -p 26257 --pl postgres12 --db $(TEMPORAL_DB) setup -v 0.0
+	./temporal-sql-tool -u root --pw $(SQL_PASSWORD) -p 26257 --pl postgres12 --db $(TEMPORAL_DB) update-schema -d ./schema/cockroachdb/temporal/versioned
+	./temporal-sql-tool -u root --pw $(SQL_PASSWORD) -p 26257 --pl postgres12 --db $(VISIBILITY_DB) drop -f
+	./temporal-sql-tool -u root --pw $(SQL_PASSWORD) -p 26257 --pl postgres12 --db $(VISIBILITY_DB) create
+	./temporal-sql-tool -u root --pw $(SQL_PASSWORD) -p 26257 --pl postgres12 --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u root --pw $(SQL_PASSWORD) -p 26257 --pl postgres12 --db $(VISIBILITY_DB) update-schema -d ./schema/cockroachdb/visibility/versioned
+
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
 	curl --fail -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
@@ -498,7 +510,7 @@ start-dependencies:
 	docker compose $(DOCKER_COMPOSE_FILES) up
 
 stop-dependencies:
-	docker compose $(DOCKER_COMPOSE_FILES) down
+	docker-compose $(DOCKER_COMPOSE_FILES) down --remove-orphans --volumes
 
 start-dependencies-cdc:
 	docker compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) up
@@ -529,6 +541,9 @@ start-postgres: start-postgres12
 
 start-postgres12: temporal-server
 	./temporal-server --env development-postgres12 --allow-no-auth start
+
+start-cockroachdb: temporal-server
+	./temporal-server --env development-cockroachdb --allow-no-auth start
 
 start-sqlite: temporal-server
 	./temporal-server --env development-sqlite --allow-no-auth start
